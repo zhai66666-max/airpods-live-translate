@@ -6,30 +6,40 @@
 
 **适合谁**：iPhone + AirPods，想要面对面实时翻译，但国行机型没有 Apple 的「实时翻译」。不用越狱、不用签名安装、不用买硬件，一个网页就够。
 
+> **在线版（现在就能用）**：<https://zhai66666-max.github.io/airpods-live-translate/>
+> 在 iPhone Safari 打开 → 右上角齿轮填一次 DeepSeek Key → 点「开始同传」。不需要装任何东西，也不需要服务器。
+
 | 需要什么 | 说明 |
 |---|---|
 | iPhone | iOS 14.5+（要 `webkitSpeechRecognition`），Safari 打开 |
 | 耳机 | 任意蓝牙耳机都行，AirPods 只是最顺手 |
 | DeepSeek API Key | [申请地址](https://platform.deepseek.com/)，按量计费，一次对话几分钱 |
-| 服务端 | 没有也能跑：Mac 本机起服务 + 局域网访问即可 |
+| 服务端 | **不需要**。在线版直接用，或本机 / 服务器自部署任选 |
 
 **不是什么**：不是原生 App、不能双方各听各的语言、不能离线用。详见下面的「物理限制」。
 
 ---
 
-## 先跑起来：三种方式，从最快到最正式
+## 先跑起来：四种方式，从最快到最正式
 
-| 方式 | 耗时 | 适不适合天天用 | 命令 |
+| 方式 | 耗时 | 适不适合天天用 | 怎么做 |
 |---|---|---|---|
-| **① Mac 本机（今天就能试）** | 1 分钟 | 临时验证 | 双击 `start.command` |
-| **② 加公网隧道（https，手机 4G 也能开）** | 3 分钟 | 短期凑用，网址会变 | 另开终端跑 `./tunnel.command` |
-| **③ 云服务器（正式）** | 10 分钟 | 适合，网址固定 | `bash deploy.sh --domain 你的域名` |
+| **① 在线版（零安装）** | 10 秒 | 适合，https 已就绪 | 打开 <https://zhai66666-max.github.io/airpods-live-translate/> |
+| **② Mac 本机** | 1 分钟 | 临时验证 | 双击 `start.command` |
+| **③ 加公网隧道（https，手机 4G 也能开）** | 3 分钟 | 短期凑用，网址会变 | 另开终端跑 `./tunnel.command` |
+| **④ 云服务器（正式）** | 10 分钟 | 适合，网址固定 | `bash deploy.sh --domain 你的域名` |
 
-**① 最快**：双击 `start.command`，它会在电脑上问一次 Key（**这样手机就不用输那 50 位**），然后把 Key 存进 `.env`，并打印一个局域网地址，比如 `http://你的电脑IP:8787`。手机连同一个 Wi-Fi 打开就行。
+**① 最快**：直接在 iPhone Safari 打开线上地址，点右上角齿轮填一次 DeepSeek Key（存在手机本地），就能用了。不用装东西、不用连电脑、不用服务器。
 
-> 但 http 下 iOS 有时不给语音识别权限。打开后**先跑 `/selftest.html`**，第 5 项（麦克风实测）能识别就说明能⽤；不能就换 ②。
+> 这是 **GitHub Pages 托管的纯静态版**，没有服务端，所以走的是「本地直连」通道：Key 存在 Safari 的 localStorage 里，只有你这台手机有。缺点是换手机或清缓存要重填，而且 Key 在浏览器里（服务端代理模式才不接触 Key，见 ④）。
+>
+> 想换成自己的部署：fork 这个仓库，在 Settings → Pages 里把 source 设成 `main` / `/`，就得到你自己的 `https://<你的用户名>.github.io/airpods-live-translate/`。
 
-**② 要 https 时**：先 `brew install cloudflared`，然后保持 ① 的服务开着，另开一个终端：
+**② Mac 本机**：双击 `start.command`，它会在电脑上问一次 Key，然后把 Key 存进 `.env`，并打印一个局域网地址，比如 `http://你的电脑IP:8787`。手机连同一个 Wi-Fi 打开就行。
+
+> http 下 iOS 有时不给语音识别权限。打开后**先跑 `/selftest.html`**，第 5 项（麦克风实测）能识别就说明能用；不能就换 ③。
+
+**③ 要临时 https 时**：先 `brew install cloudflared`，然后保持 ② 的服务开着，另开一个终端：
 
 ```bash
 ./tunnel.command
@@ -37,9 +47,11 @@
 
 它会打印一个 `https://xxx.trycloudflare.com` 的网址，手机打开即可（不用同一个 Wi-Fi，4G 也行）。关掉终端网址就失效——只适合测试。
 
-**③ 长期用**：见 `DEPLOY.md`，或者直接看 `deploy.sh` 顶部的用法注释。
+**④ 长期用**：见 `DEPLOY.md`，或者直接看 `deploy.sh` 顶部的用法注释。只有这条路能把 Key 留在服务器上（手机端完全不接触 Key）。
 
-> 安全边界：服务端只对外发 `.html/.css/.png/.svg/.webmanifest` 和 `manifest.json`。`.env`、脚本、文档一律 404（含各种目录穿越写法）。所以 Key 放在服务器环境变量或本地 `.env` 里是安全的——但如果哪天你把整个目录丢到别的静态托管（比如 GitHub Pages）上，先确认没有 `.env` 跟着传。
+> 安全边界：`server.js` 只对外发 `.html/.css/.png/.svg/.webmanifest` 和 `manifest.json`。`.env`、脚本、文档一律 404（含各种目录穿越写法）。
+>
+> 但 **GitHub Pages 是通用静态托管，没有这层白名单**——它会把仓库里的文件照发。所以本仓库的 `.gitignore` 已排除 `.env`，且仓库里不放任何凭据。你自己 fork 后也请守住这条：**别把 `.env` 提交上去**。
 
 ---
 
@@ -125,6 +137,8 @@ iPhone 同一时刻**只有一个音频出口**，网页没法自己切，所以
 | `server.js` | 静态托管 + DeepSeek 反向代理，把 Key 留在服务器上 |
 | `deploy.sh` | 云服务器一键部署（systemd + nginx + 证书） |
 | `DEPLOY.md` | 部署的详细步骤与排错 |
+| `docs/screenshot.png` | README 里的界面图 |
+| `.nojekyll` | 让 GitHub Pages 原样托管，不走 Jekyll 构建 |
 
 ---
 
