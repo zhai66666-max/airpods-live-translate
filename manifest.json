@@ -1,0 +1,16 @@
+{
+  "name": "同传 · AirPods",
+  "short_name": "同传",
+  "description": "给国行 AirPods 补上同声传译：耳机麦克风收外语，翻译后念进耳朵。",
+  "start_url": "./",
+  "scope": "./",
+  "display": "browser",
+  "orientation": "portrait",
+  "background_color": "#f4f3ef",
+  "theme_color": "#f4f3ef",
+  "lang": "zh-CN",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+  ]
+}

@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>同传 · 自检</title>
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#f4f3ef">
+<style>
+  :root{--bg:#f4f3ef;--card:#fff;--ink:#15181c;--ink2:#3d434b;--muted:#7b828c;
+        --line:#e2e0d8;--ok:#0d7a68;--bad:#c0392b;--warn:#a8501c;--sab:env(safe-area-inset-bottom,0px)}
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  body{margin:0;background:var(--bg);color:var(--ink);font-size:16px;line-height:1.6;
+    font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Helvetica Neue",sans-serif}
+  .wrap{max-width:720px;margin:0 auto;padding:calc(env(safe-area-inset-top,0px) + 18px) 16px calc(20px + var(--sab))}
+  h1{font-size:19px;margin:0 0 4px}
+  .sub{font-size:13px;color:var(--muted);margin-bottom:16px}
+  .item{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:13px 15px;margin-bottom:9px}
+  .item .top{display:flex;align-items:center;gap:9px}
+  .item .name{font-size:15px;font-weight:600;flex:1}
+  .item .st{font-size:12px;font-weight:700;padding:2px 9px;border-radius:20px;background:#f0eee7;color:var(--muted)}
+  .item .st.ok{background:#e3f2ee;color:var(--ok)}
+  .item .st.bad{background:#fbeae7;color:var(--bad)}
+  .item .st.warn{background:#f8ece2;color:var(--warn)}
+  .item .det{font-size:12.5px;color:var(--ink2);margin-top:6px;line-height:1.6;word-break:break-word}
+  .item .det:empty{display:none}
+  .live{margin-top:8px;font-size:14px;font-style:italic;color:var(--muted);min-height:20px}
+  .btns{display:flex;gap:9px;margin:16px 0}
+  button{flex:1;padding:14px;border-radius:14px;border:1px solid var(--line);background:var(--card);
+    font:inherit;font-size:15px;font-weight:600;color:var(--ink);cursor:pointer}
+  button.primary{background:var(--ok);color:#fff;border-color:transparent}
+  button:active{transform:scale(.99)}
+  textarea{width:100%;min-height:190px;border:1px solid var(--line);border-radius:14px;padding:12px;
+    font:12.5px/1.6 ui-monospace,Menlo,monospace;background:var(--card);color:var(--ink);resize:vertical}
+  select{font:inherit;font-size:15px;border:0;background:transparent;text-align:right;color:var(--ink);outline:none}
+  .row{display:flex;align-items:center;justify-content:space-between;gap:12px}
+  .hint{font-size:11.5px;color:#a8adb5;margin-top:10px;line-height:1.55}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>同传 · 自检</h1>
+  <div class="sub">在 iPhone 上打开这一页，跑到全绿就说明同传能用了。最后复制报告发我。</div>
+
+  <div class="item">
+    <div class="row">
+      <div class="name">听写语言（测试用）</div>
+      <select id="lang">
+        <option value="en-US">英语</option>
+        <option value="zh-CN">中文</option>
+        <option value="ja-JP">日语</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="item"><div class="top"><div class="name">1. 页面环境</div><div class="st" id="s1">待测</div></div><div class="det" id="d1"></div></div>
+  <div class="item"><div class="top"><div class="name">2. 语音识别可用</div><div class="st" id="s2">待测</div></div><div class="det" id="d2"></div></div>
+  <div class="item"><div class="top"><div class="name">3. 朗读音色</div><div class="st" id="s3">待测</div></div><div class="det" id="d3"></div>
+    <div class="btns" style="margin:10px 0 0"><button id="btnSpeak">▶ 放一段语音（听耳机）</button></div></div>
+  <div class="item"><div class="top"><div class="name">4. 翻译通道</div><div class="st" id="s4">待测</div></div><div class="det" id="d4"></div></div>
+  <div class="item"><div class="top"><div class="name">5. 麦克风实测</div><div class="st" id="s5">待测</div></div><div class="det" id="d5"></div>
+    <div class="live" id="live5"></div>
+    <div class="btns" style="margin:10px 0 0"><button id="btnMic">🎙 说一句话，看能不能识别</button></div></div>
+
+  <div class="btns">
+    <button class="primary" id="btnAll">全部重跑</button>
+    <button id="btnCopy">复制报告</button>
+  </div>
+
+  <textarea id="report" readonly placeholder="报告会出现在这里"></textarea>
+  <div class="hint">
+    第 3 项：戴上 AirPods 再点，能听到中英各一句就说明音频通路正常。<br>
+    第 5 项：点完立刻说一句话（英文最好），2 秒没动静就再说一次。
+  </div>
+</div>
+
+<script>
+"use strict";
+const $ = s => document.querySelector(s);
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+const R = {};   // 结果汇总
+const LSKEY = 'apt.v2';
+let S = {};
+try{ S = JSON.parse(localStorage.getItem(LSKEY) || '{}'); }catch(e){ S = {}; }
+
+function set(n, state, detail){
+  const map = { ok:'通过', bad:'失败', warn:'注意', wait:'待测' };
+  const el = $('#s' + n);
+  el.textContent = map[state] || state;
+  el.className = 'st ' + (state === 'wait' ? '' : state);
+  if(detail !== undefined) $('#d' + n).textContent = detail;
+}
+const isStandalone = () => (window.navigator.standalone === true) ||
+  (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches);
+
+/* ---------- 1 环境 ---------- */
+function testEnv(){
+  const proto = location.protocol;
+  const stand = isStandalone();
+  R.env = { proto, standalone:stand, ua:navigator.userAgent };
+  const bits = [];
+  bits.push(proto === 'https:' ? 'https ✓'
+    : proto === 'http:' ? 'http（未加密；能用就行，能用 https 更稳）'
+    : proto + '（本地文件，建议改用网址打开）');
+  bits.push(stand ? '主屏幕独立模式 ✗（此模式 iOS 不开放语音识别）' : 'Safari 普通页面 ✓');
+  let state = 'ok';
+  if(stand) state = 'bad';
+  if(proto === 'file:') state = 'warn';
+  set(1, state, bits.join(' ｜ '));
+}
+
+/* ---------- 2 语音识别 ---------- */
+function testSR(){
+  if(!SR){
+    set(2, 'bad', '浏览器没暴露 SpeechRecognition。多半是主屏幕独立模式，或不是 Safari。');
+    R.sr = 'unsupported';
+    return;
+  }
+  set(2, 'ok', 'API 存在：' + (window.SpeechRecognition ? 'SpeechRecognition' : 'webkitSpeechRecognition') +
+      '。真正能不能用要看第 5 项。');
+  R.sr = 'api-present';
+}
+
+/* ---------- 3 音色 ---------- */
+function voicesOf(){
+  try{ return speechSynthesis.getVoices() || []; }catch(e){ return []; }
+}
+function testVoices(){
+  const v = voicesOf();
+  const zh = v.filter(x => (x.lang||'').toLowerCase().startsWith('zh'));
+  const en = v.filter(x => (x.lang||'').toLowerCase().startsWith('en'));
+  R.voices = { total:v.length, zh:zh.map(x=>x.name), en:en.map(x=>x.name) };
+  if(!v.length){ set(3, 'warn', '音色列表还是空的（Safari 会延迟加载），点右边按钮试声音为准。'); return; }
+  set(3, 'ok', '共 ' + v.length + ' 个音色；中文 ' + zh.length + ' 个（' + (zh.map(x=>x.name).slice(0,3).join('、') || '无') +
+      '），英文 ' + en.length + ' 个。');
+}
+$('#btnSpeak').addEventListener('click', () => {
+  const v = voicesOf();
+  const zh = v.find(x => (x.lang||'').toLowerCase().startsWith('zh'));
+  const en = v.find(x => (x.lang||'').toLowerCase().startsWith('en'));
+  try{ speechSynthesis.cancel(); }catch(e){}
+  const a = new SpeechSynthesisUtterance('中文这一句，听得清吗？');
+  if(zh) a.voice = zh; a.lang = 'zh-CN'; a.rate = 1.05;
+  const b = new SpeechSynthesisUtterance('And this is the English sentence.');
+  if(en) b.voice = en; b.lang = 'en-US'; b.rate = 1.05;
+  speechSynthesis.speak(a);
+  setTimeout(() => speechSynthesis.speak(b), 1600);
+  R.ttsFired = true;
+  set(3, 'ok', '已发出中英各一句。听到了点绿，没听到检查静音开关 / 音量 / 音频输出设备。');
+});
+
+/* ---------- 4 翻译通道 ---------- */
+async function testChannel(){
+  let proxy = false;
+  try{
+    const r = await fetch('api/health', { cache:'no-store' });
+    if(r.ok){
+      const j = await r.json();
+      proxy = j.proxy === 'ok';
+      R.health = j;
+    }
+  }catch(e){ R.health = { error: String(e.message || e) }; }
+
+  const key = (S.apiKey || '').trim();
+  R.channel = proxy ? 'proxy' : (key ? 'direct' : 'none');
+
+  if(!proxy && !key){
+    set(4, 'bad', '既没有服务器代理，本地也没填 Key。这一项必挂，其余可继续。');
+    return;
+  }
+
+  const t0 = performance.now();
+  let first = 0, text = '';
+  try{
+    const url = proxy ? 'api/translate' : 'https://api.deepseek.com/chat/completions';
+    const headers = { 'Content-Type':'application/json' };
+    if(!proxy) headers['Authorization'] = 'Bearer ' + key;
+    const res = await fetch(url, {
+      method:'POST', headers,
+      body: JSON.stringify({
+        model:'deepseek-chat', stream:true, temperature:1.3, max_tokens:60,
+        messages:[{ role:'system', content:'把下面的句子译成简体中文，只输出译文。' },
+                  { role:'user', content:'Hello, how are you today?' }],
+      }),
+    });
+    if(!res.ok){ throw new Error(res.status + ' ' + (await res.text()).slice(0,120)); }
+    const reader = res.body.getReader();
+    const dec = new TextDecoder();
+    let buf = '';
+    for(;;){
+      const { done, value } = await reader.read();
+      if(done) break;
+      buf += dec.decode(value, { stream:true });
+      let i;
+      while((i = buf.indexOf('\n')) >= 0){
+        const line = buf.slice(0, i).trim(); buf = buf.slice(i+1);
+        if(!line.startsWith('data:')) continue;
+        const p = line.slice(5).trim();
+        if(!p || p === '[DONE]') continue;
+        try{
+          const j = JSON.parse(p);
+          const d = j.choices && j.choices[0] && j.choices[0].delta && j.choices[0].delta.content;
+          if(d){ if(!first) first = performance.now() - t0; text += d; }
+        }catch(e){}
+      }
+    }
+    const total = performance.now() - t0;
+    R.translate = { ms: Math.round(total), firstMs: Math.round(first), out: text.trim() };
+    set(4, 'ok', '通道：' + (proxy ? '服务器代理' : '本地直连') +
+        ' ｜ 首字 ' + Math.round(first) + 'ms，整句 ' + Math.round(total) + 'ms ｜ “' + text.trim().slice(0,40) + '”');
+  }catch(e){
+    R.translate = { error: String(e.message || e) };
+    set(4, 'bad', '翻译失败：' + (e.message || e));
+  }
+}
+
+/* ---------- 5 麦克风 ---------- */
+$('#btnMic').addEventListener('click', () => {
+  if(!SR){ set(5, 'bad', '没有语音识别 API，跳过。'); return; }
+  const btn = $('#btnMic');
+  btn.disabled = true; btn.textContent = '正在听…说完等一下';
+  $('#live5').textContent = '';
+  let got = '', done = false;
+
+  const r = new SR();
+  r.lang = $('#lang').value;
+  r.continuous = false;
+  r.interimResults = true;
+  r.maxAlternatives = 1;
+
+  const finish = (state, msg) => {
+    if(done) return; done = true;
+    try{ r.abort(); }catch(e){}
+    btn.disabled = false; btn.textContent = '🎙 再说一次';
+    set(5, state, msg);
+    R.mic = { text: got, state };
+    buildReport();
+  };
+
+  r.onresult = e => {
+    let t = '';
+    for(let i = e.resultIndex; i < e.results.length; i++) t += e.results[i][0].transcript;
+    if(t){ got = t; $('#live5').textContent = t; }
+  };
+  r.onerror = ev => {
+    const m = {
+      'not-allowed':'权限被拒。设置 → Safari → 麦克风；再确认「设置 → Siri 与搜索」里 Siri 已开。',
+      'service-not-allowed':'听写服务不可用。Siri 没开，或主屏幕独立模式。',
+      'audio-capture':'抓不到麦克风，确认 AirPods 已连上。',
+      'network':'听写服务需要联网，检查网络。',
+      'no-speech':'没听到声音，再说一次，靠近一点。',
+    }[ev.error] || ('出错：' + ev.error);
+    finish('bad', m);
+  };
+  r.onend = () => {
+    if(got) finish('ok', '识别到：「' + got + '」');
+    else finish('warn', '这一轮什么都没有。可能没说、太小声，或识别服务没响应。');
+  };
+
+  try{ r.start(); }
+  catch(e){ finish('bad', '启动失败：' + e.message); return; }
+  setTimeout(() => { if(!got) finish('warn', '8 秒没识别出内容。检查麦克风权限与 Siri。'); }, 8000);
+});
+
+/* ---------- 报告 ---------- */
+function buildReport(){
+  const lines = [];
+  lines.push('# 同传自检报告');
+  lines.push('- 时间：' + new Date().toLocaleString('zh-CN'));
+  lines.push('- 页面：' + location.href);
+  if(R.env){
+    lines.push('- 协议：' + R.env.proto + ' ｜ 独立模式：' + (R.env.standalone ? '是' : '否'));
+    lines.push('- UA：' + R.env.ua);
+  }
+  lines.push('- 语音识别：' + (R.sr || '未测'));
+  if(R.voices) lines.push('- 音色：共 ' + R.voices.total + '，中文 ' + R.voices.zh.join('/') + '，英文 ' + R.voices.en.join('/'));
+  lines.push('- 通道：' + (R.channel || '未测') + (R.health ? ' ｜ health=' + JSON.stringify(R.health) : ''));
+  if(R.translate){
+    lines.push(R.translate.error
+      ? '- 翻译：✗ ' + R.translate.error
+      : '- 翻译：✓ 首字 ' + R.translate.firstMs + 'ms，整句 ' + R.translate.ms + 'ms，输出「' + R.translate.out + '」');
+  }
+  if(R.mic) lines.push('- 麦克风：' + (R.mic.state === 'ok' ? '✓ 「' + R.mic.text + '」' : '✗ 无结果'));
+  $('#report').value = lines.join('\n');
+}
+$('#btnCopy').addEventListener('click', async () => {
+  buildReport();
+  const t = $('#report');
+  try{ await navigator.clipboard.writeText(t.value); $('#btnCopy').textContent = '已复制'; }
+  catch(e){ t.select(); document.execCommand && document.execCommand('copy'); $('#btnCopy').textContent = '已选中，长按复制'; }
+  setTimeout(() => { $('#btnCopy').textContent = '复制报告'; }, 2000);
+});
+
+$('#btnAll').addEventListener('click', runAll);
+async function runAll(){
+  ['1','2','3','4','5'].forEach(n => set(n, 'wait', ''));
+  $('#live5').textContent = '';
+  testEnv(); testSR(); testVoices();
+  await testChannel();
+  buildReport();
+}
+setTimeout(runAll, 200);
+// Safari 的音色是异步加载的，刚进页面时列表常为空，加载完再测一次
+try{
+  speechSynthesis.onvoiceschanged = () => {
+    if(!R.voices || !R.voices.total){ testVoices(); buildReport(); }
+  };
+  setTimeout(() => { if(!R.voices || !R.voices.total) testVoices(); }, 1800);
+}catch(e){}
+</script>
+</body>
+</html>

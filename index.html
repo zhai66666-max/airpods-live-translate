@@ -1,0 +1,1046 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>同传</title>
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1,user-scalable=no">
+<!-- 故意不加 apple-mobile-web-app-capable：加了会变成"独立 Web App"模式，
+     而 iOS 在该模式下不开放语音识别。保持普通浏览器模式，加到主屏幕也能正常用。 -->
+<meta name="apple-mobile-web-app-title" content="同传">
+<meta name="theme-color" content="#f4f3ef">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-180.png">
+<style>
+  :root{
+    --bg:#f4f3ef; --bg2:#eceae4; --card:#fff; --ink:#15181c; --ink2:#3d434b;
+    --muted:#7b828c; --line:#e2e0d8; --line2:#efece5;
+    --a1:#0d7a68; --a1soft:#e3f2ee;
+    --a2:#a8501c; --a2soft:#f8ece2;
+    --accent:var(--a1); --accentsoft:var(--a1soft);
+    --danger:#c0392b;
+    --sab:env(safe-area-inset-bottom,0px);
+    --sat:env(safe-area-inset-top,0px);
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;height:100%;-webkit-text-size-adjust:100%}
+  body{
+    background:var(--bg);color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","PingFang SC","Helvetica Neue",Arial,sans-serif;
+    font-size:16px;line-height:1.6;overscroll-behavior:none;
+  }
+  body.replymode{--accent:var(--a2);--accentsoft:var(--a2soft)}
+  #app{display:flex;flex-direction:column;height:100vh;height:100dvh;max-width:780px;margin:0 auto}
+
+  header{padding:calc(var(--sat) + 8px) 16px 8px;flex:0 0 auto;border-bottom:1px solid var(--line2)}
+  .hrow{display:flex;align-items:center;gap:10px}
+  .brand{font-size:15px;font-weight:650;letter-spacing:.02em;display:flex;align-items:center;gap:7px}
+  .dot{width:7px;height:7px;border-radius:50%;background:#c9c7c0;transition:.2s}
+  .dot.live{background:var(--accent);animation:pulse 1.8s infinite}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(13,122,104,.45)}70%{box-shadow:0 0 0 9px rgba(13,122,104,0)}100%{box-shadow:0 0 0 0 rgba(13,122,104,0)}}
+  .spacer{flex:1}
+  .iconbtn{width:36px;height:36px;border-radius:11px;border:1px solid var(--line);background:var(--card);
+    display:grid;place-items:center;cursor:pointer;color:var(--ink2);font-size:15px;padding:0}
+  .iconbtn:active{transform:scale(.95)}
+
+  .seg{display:flex;margin-top:9px;background:var(--bg2);border-radius:13px;padding:3px;gap:3px}
+  .seg button{flex:1;border:0;background:transparent;padding:9px 4px;border-radius:10px;
+    font:inherit;font-size:13px;font-weight:600;color:var(--muted);cursor:pointer;
+    display:flex;align-items:center;justify-content:center;gap:5px;transition:.18s;white-space:nowrap}
+  .seg button.active{background:var(--card);color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.07)}
+  .seg button.active .arw{color:var(--accent)}
+
+  main{flex:1 1 auto;overflow-y:auto;-webkit-overflow-scrolling:touch;
+    padding:14px 14px 4px;display:flex;flex-direction:column;gap:10px}
+
+  .card{background:var(--card);border:1px solid var(--line2);border-radius:16px;
+    padding:12px 15px;animation:rise .22s ease-out}
+  @keyframes rise{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+  .card .src{font-size:13.5px;line-height:1.5;color:var(--muted);
+    padding-left:10px;border-left:2px solid var(--line)}
+  .card .dst{margin-top:7px;font-size:21px;line-height:1.42;font-weight:500;
+    color:var(--ink);word-break:break-word}
+  .card .dst.streaming::after{content:'';display:inline-block;width:2px;height:1.05em;
+    vertical-align:-.16em;margin-left:2px;background:var(--accent);animation:blink .9s step-end infinite}
+  @keyframes blink{50%{opacity:0}}
+  .dots{display:inline-flex;gap:4px;align-items:center;height:21px}
+  .dots i{width:5px;height:5px;border-radius:50%;background:var(--accent);opacity:.35;animation:hop 1.1s infinite}
+  .dots i:nth-child(2){animation-delay:.15s}
+  .dots i:nth-child(3){animation-delay:.3s}
+  @keyframes hop{0%,100%{opacity:.25;transform:translateY(0)}50%{opacity:1;transform:translateY(-3px)}}
+
+  /* 对方视角：整列卡片倒转 180° */
+  main.flip .card, main.flip .livebar{transform:rotate(180deg);animation:none}
+
+  .livebar{font-size:13.5px;color:var(--muted);padding:2px 6px 6px;min-height:22px;font-style:italic;flex:0 0 auto}
+  .empty{margin:auto;text-align:center;color:var(--muted);font-size:14px;line-height:1.9;padding:16px;max-width:520px}
+  .empty .big{font-size:32px;display:block;margin-bottom:8px}
+
+  footer{flex:0 0 auto;padding:8px 14px calc(10px + var(--sab));
+    background:linear-gradient(to top,var(--bg) 72%,rgba(244,243,239,0))}
+  .ctrls{display:flex;align-items:center;gap:10px}
+  #talk{flex:1;height:56px;border:0;border-radius:18px;background:var(--accent);color:#fff;
+    font:inherit;font-size:16.5px;font-weight:650;letter-spacing:.03em;cursor:pointer;
+    display:flex;align-items:center;justify-content:center;gap:9px;
+    box-shadow:0 4px 14px rgba(13,122,104,.22);transition:.16s}
+  #talk:active{transform:scale(.985)}
+  #talk.stop{background:#2a2e35;box-shadow:0 4px 14px rgba(0,0,0,.18)}
+  #talk .sq{width:11px;height:11px;border-radius:3px;background:#fff}
+  .mini{width:52px;height:56px;border-radius:18px;border:1px solid var(--line);background:var(--card);
+    display:grid;place-items:center;font-size:19px;cursor:pointer;color:var(--ink2);padding:0}
+  .mini.on{background:var(--accentsoft);border-color:transparent;color:var(--accent)}
+  .mini.off{opacity:.42}
+  .stat{text-align:center;font-size:11px;color:#a8adb5;margin-top:7px;height:14px}
+
+  #sheet{position:fixed;inset:0;z-index:50;display:none}
+  #sheet.show{display:block}
+  #sheet .veil{position:absolute;inset:0;background:rgba(20,22,26,.34)}
+  #sheet .panel{position:absolute;left:0;right:0;bottom:0;max-height:92dvh;overflow-y:auto;
+    background:var(--bg);border-radius:22px 22px 0 0;padding:8px 18px calc(26px + var(--sab));
+    animation:up .25s cubic-bezier(.2,.8,.3,1);max-width:780px;margin:0 auto}
+  @keyframes up{from{transform:translateY(18px);opacity:.6}to{transform:none;opacity:1}}
+  .grab{width:38px;height:4px;border-radius:3px;background:#d5d2c9;margin:6px auto 14px}
+  .panel h3{font-size:12.5px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:20px 0 8px;font-weight:650}
+  .panel h3:first-of-type{margin-top:4px}
+  .field{background:var(--card);border:1px solid var(--line2);border-radius:13px;padding:11px 13px;margin-bottom:9px}
+  .field label{display:block;font-size:12.5px;color:var(--muted);margin-bottom:3px}
+  .field input,.field textarea{width:100%;border:0;background:transparent;font:inherit;font-size:15px;
+    color:var(--ink);padding:2px 0;outline:none;-webkit-appearance:none;appearance:none}
+  .field textarea{resize:vertical;min-height:56px;line-height:1.5}
+  .field .hint{font-size:11.5px;color:#a8adb5;margin-top:4px;line-height:1.45}
+  .row{display:flex;align-items:center;gap:12px;justify-content:space-between;
+    background:var(--card);border:1px solid var(--line2);border-radius:13px;padding:12px 13px;margin-bottom:9px}
+  .row .lab{font-size:14.5px}
+  .row .sub{font-size:11.5px;color:#a8adb5;margin-top:2px;line-height:1.4;max-width:210px}
+  select{font:inherit;font-size:15px;border:0;background:transparent;text-align:right;color:var(--ink);
+    -webkit-appearance:none;appearance:none;padding:2px 0;outline:none}
+  input[type=range]{width:112px;accent-color:var(--accent)}
+  .sw{width:46px;height:28px;border-radius:16px;background:#dcd9d0;position:relative;transition:.18s;flex:0 0 auto;cursor:pointer}
+  .sw::after{content:'';position:absolute;top:3px;left:3px;width:22px;height:22px;border-radius:50%;
+    background:#fff;transition:.18s;box-shadow:0 1px 3px rgba(0,0,0,.2)}
+  .sw.on{background:var(--accent)}
+  .sw.on::after{left:21px}
+  .btnrow{display:flex;gap:9px;margin-top:10px}
+  .btnrow button{flex:1;padding:13px;border-radius:13px;border:1px solid var(--line);background:var(--card);
+    font:inherit;font-size:14.5px;font-weight:600;color:var(--ink);cursor:pointer}
+  .btnrow button.primary{background:var(--accent);color:#fff;border-color:transparent}
+  .btnrow button.warn{color:var(--danger)}
+  #connmsg{font-size:12.5px;margin-top:6px;min-height:16px;line-height:1.5}
+  #connmsg.ok{color:var(--a1)} #connmsg.err{color:var(--danger)}
+  .chanbadge{font-size:11px;padding:3px 8px;border-radius:20px;background:var(--a1soft);color:var(--a1);font-weight:600}
+  .chanbadge.local{background:#f0eee7;color:var(--muted)}
+
+  .toast{position:fixed;left:50%;bottom:calc(106px + var(--sab));transform:translateX(-50%);
+    background:rgba(28,31,36,.95);color:#fff;font-size:13.5px;padding:10px 16px;border-radius:12px;
+    z-index:80;max-width:86vw;text-align:center;line-height:1.5;animation:tin .2s}
+  @keyframes tin{from{opacity:0;transform:translate(-50%,8px)}to{opacity:1;transform:translate(-50%,0)}}
+
+  .setup{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px;text-align:left}
+  .setup h4{margin:0 0 8px;font-size:15.5px}
+  .setup p{margin:0 0 10px;font-size:13.5px;color:var(--ink2);line-height:1.7}
+  .setup ol{margin:0;padding-left:18px;font-size:13.5px;color:var(--ink2);line-height:1.8}
+  .setup code{background:var(--bg2);padding:1px 5px;border-radius:5px;font-size:12.5px}
+  .linklike{color:var(--a1);text-decoration:none;font-weight:600}
+  .warnbox{background:#fdf1ec;border:1px solid #f3d8cb;border-radius:13px;padding:12px 14px;
+    font-size:13px;color:#8a3f1c;line-height:1.65;margin-bottom:12px}
+  @media (min-width:700px){ .card .dst{font-size:23px} main{padding:18px 20px 4px} }
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <div class="hrow">
+      <div class="brand"><span class="dot" id="dot"></span>同传</div>
+      <span class="chanbadge local" id="chanBadge" style="display:none">…</span>
+      <div class="spacer"></div>
+      <button class="iconbtn" id="btnFont" title="字号">Aa</button>
+      <button class="iconbtn" id="btnSheet" title="设置">⚙</button>
+    </div>
+    <div class="seg" id="seg">
+      <button data-mode="listen" class="active">我听对方 <span class="arw">→</span> 中文</button>
+      <button data-mode="reply">对方听我 <span class="arw">→</span> 外语</button>
+    </div>
+    <div class="warnbox" id="flipHint" style="display:none;margin:10px 0 4px">
+      <div><b>把屏幕转向对方</b>（文字已翻转 180°，从对面看是正的）。</div>
+      <div style="margin-top:7px">要让他<b>听到声音</b>：控制中心 → 播放卡片右上角的 <b>AirPlay 图标</b> → 选 <b>iPhone</b>。切完英文从扬声器出来，你不用听中文——自己说的话你懂。切回「我听对方」时记得再切回 AirPods。</div>
+    </div>
+  </header>
+
+  <main id="stream">
+    <div class="empty" id="empty">
+      <span class="big">🎧</span>戴好 AirPods，点下面「开始同传」
+    </div>
+  </main>
+
+  <div class="livebar" id="livebar"></div>
+
+  <footer>
+    <div class="ctrls">
+      <button class="mini on" id="btnSpeak" title="朗读">🔊</button>
+      <button id="talk"><span class="sq" style="display:none"></span><span class="lb">开始同传</span></button>
+      <button class="mini" id="btnExport" title="导出">↧</button>
+    </div>
+    <div class="stat" id="stat"></div>
+  </footer>
+</div>
+
+<div id="sheet">
+  <div class="veil" data-close></div>
+  <div class="panel">
+    <div class="grab"></div>
+
+    <h3>翻译通道</h3>
+    <div class="field">
+      <label>当前状态</label>
+      <div id="chanDesc" style="font-size:14.5px;line-height:1.6">检测中…</div>
+      <div class="hint" id="chanHint"></div>
+    </div>
+    <div class="field" id="keyField">
+      <label>DeepSeek API Key</label>
+      <input type="password" id="fKey" placeholder="sk-..." autocomplete="off" autocapitalize="off" spellcheck="false">
+      <div class="hint">仅当走「本地直连」时才需要。若服务器已配置 Key，这里留空即可，Key 不会出现在手机上。</div>
+    </div>
+    <div class="row">
+      <div><div class="lab">模型</div><div class="sub">同传用 chat 最快</div></div>
+      <select id="fModel">
+        <option value="deepseek-chat">deepseek-chat</option>
+        <option value="deepseek-reasoner">deepseek-reasoner</option>
+      </select>
+    </div>
+    <div class="btnrow"><button id="btnTest">测试连接</button></div>
+    <div id="connmsg"></div>
+
+    <h3>语言</h3>
+    <div class="row">
+      <div><div class="lab">我的语言</div><div class="sub">译文用这个语言念给我</div></div>
+      <select id="fMyLang"></select>
+    </div>
+    <div class="row">
+      <div><div class="lab">对方语言</div><div class="sub">要翻译的外语</div></div>
+      <select id="fTheirLang"></select>
+    </div>
+
+    <h3>同传手感</h3>
+    <div class="row">
+      <div><div class="lab">抢译（边说边译）</div><div class="sub">听到逗号级停顿就先译前半句。开=更快，关=更完整</div></div>
+      <div class="sw on" id="swProv"></div>
+    </div>
+    <div class="row">
+      <div><div class="lab">朗读策略</div><div class="sub">积压时丢弃旧句，还是排队念完</div></div>
+      <select id="fPolicy">
+        <option value="skip">跳播最新</option>
+        <option value="queue">按顺序排队</option>
+      </select>
+    </div>
+    <div class="row">
+      <div><div class="lab">语速</div></div>
+      <input type="range" id="fRate" min="0.7" max="1.6" step="0.05">
+    </div>
+    <div class="row">
+      <div><div class="lab">对方听我时用外放</div><div class="sub">开着就念出声给对方听（需先把音频输出切到 iPhone 扬声器）；关掉只出大字幕</div></div>
+      <div class="sw on" id="swSpeaker"></div>
+    </div>
+    <div class="row">
+      <div><div class="lab">回声防护</div><div class="sub">用外放时屏幕容易冒出重复句，打开它：朗读期间丢弃识别结果</div></div>
+      <div class="sw" id="swEcho"></div>
+    </div>
+    <div class="row">
+      <div><div class="lab">全双工 / 半双工</div><div class="sub">默认全双工（边念边听）。若真机上出现「念完就哑了」或反复听到自己的译文，切半双工：朗读时暂停听</div></div>
+      <select id="fDuplex">
+        <option value="full">全双工</option>
+        <option value="half">半双工</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>术语表（可选）</label>
+      <textarea id="fGloss" placeholder="每行一条，例如：&#10;翟成龙 = Zhai Chenglong&#10;数字行政负担 = digital administrative burden"></textarea>
+      <div class="hint">人名、机构、行话写这儿，翻译时强制沿用，前后一致。</div>
+    </div>
+    <div class="field">
+      <label>上下文轮数</label>
+      <input type="text" id="fCtx" inputmode="numeric" placeholder="3">
+      <div class="hint">把前几轮对话一起发给模型，代词和术语更连贯。越大越慢越贵。</div>
+    </div>
+
+    <h3>数据</h3>
+    <div class="btnrow">
+      <button id="btnExport2">导出字幕</button>
+      <button id="btnClear" class="warn">清空记录</button>
+    </div>
+    <div class="btnrow">
+      <button id="btnSelfTest">跑一遍自检（麦克风 / 朗读 / 翻译）</button>
+    </div>
+    <div class="hint" style="font-size:11.5px;color:#a8adb5;margin-top:14px;line-height:1.6">
+      语音识别由 iOS 系统听写完成（本地/Apple 服务），翻译走 DeepSeek。本页面不存任何数据到服务器。
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+
+/* ===================== 常量 ===================== */
+const LANGS = [
+  { code:'zh-CN', label:'中文', prompt:'简体中文' },
+  { code:'en-US', label:'英语', prompt:'英语' },
+  { code:'ja-JP', label:'日语', prompt:'日语' },
+  { code:'ko-KR', label:'韩语', prompt:'韩语' },
+  { code:'fr-FR', label:'法语', prompt:'法语' },
+  { code:'de-DE', label:'德语', prompt:'德语' },
+  { code:'es-ES', label:'西班牙语', prompt:'西班牙语' },
+  { code:'ru-RU', label:'俄语', prompt:'俄语' },
+  { code:'it-IT', label:'意大利语', prompt:'意大利语' },
+  { code:'pt-BR', label:'葡萄牙语', prompt:'葡萄牙语' },
+  { code:'th-TH', label:'泰语', prompt:'泰语' },
+  { code:'vi-VN', label:'越南语', prompt:'越南语' },
+  { code:'ar-SA', label:'阿拉伯语', prompt:'阿拉伯语' },
+  { code:'hi-IN', label:'印地语', prompt:'印地语' },
+  { code:'id-ID', label:'印尼语', prompt:'印尼语' },
+  { code:'tr-TR', label:'土耳其语', prompt:'土耳其语' },
+];
+const langOf = c => LANGS.find(x => x.code === c) || LANGS[0];
+
+const DEFAULTS = {
+  apiKey:'', model:'deepseek-chat',
+  myLang:'zh-CN', theirLang:'en-US',
+  provisional:true, policy:'skip', rate:1.05,
+  echoGuard:false, speak:true, speakerOut:true, duplex:'full',
+  glossary:'', ctx:3,
+};
+const LS = 'apt.v2';
+let S = load();
+function load(){
+  try{ return Object.assign({}, DEFAULTS, JSON.parse(localStorage.getItem(LS) || '{}')); }
+  catch(e){ return Object.assign({}, DEFAULTS); }
+}
+function save(){ try{ localStorage.setItem(LS, JSON.stringify(S)); }catch(e){} }
+
+/* ===================== 元素 ===================== */
+const $ = s => document.querySelector(s);
+const streamEl = $('#stream'), livebar = $('#livebar'), statEl = $('#stat');
+const talkBtn = $('#talk'), dot = $('#dot'), emptyEl = $('#empty');
+
+/* ===================== 状态 ===================== */
+let mode = 'listen';
+let listening = false;
+let rec = null, recGen = 0, restartTimer = null, recSuspended = false;
+const cards = [];
+let utt = null;
+const recentSpoken = [];
+let lastFinalText = '', lastFinalAt = 0;
+
+const CH = { mode:'unknown', proxy:false };
+const dir = () => mode === 'listen'
+  ? { src:S.theirLang, dst:S.myLang, from:langOf(S.theirLang), to:langOf(S.myLang) }
+  : { src:S.myLang, dst:S.theirLang, from:langOf(S.myLang), to:langOf(S.theirLang) };
+
+/* ===================== 通道检测 ===================== */
+async function detectChannel(){
+  try{
+    const r = await fetch('api/health', { cache:'no-store' });
+    if(r.ok){
+      const j = await r.json();
+      if(j && j.proxy === 'ok'){ CH.mode = 'proxy'; CH.proxy = true; return; }
+      if(j && j.proxy === 'nokey'){ CH.mode = 'direct'; CH.proxy = false; return; }
+    }
+  }catch(e){}
+  CH.mode = 'direct'; CH.proxy = false;
+}
+
+function paintChannel(){
+  const b = $('#chanBadge');
+  b.style.display = '';
+  if(CH.mode === 'proxy'){
+    b.textContent = '服务器代理'; b.className = 'chanbadge';
+    $('#chanDesc').textContent = '✓ 已走服务器代理，Key 存在服务器上，手机端不接触。';
+    $('#chanHint').textContent = '这是推荐方式：换手机、清缓存都不影响，别人拿到链接也用不了你的额度。';
+    $('#keyField').style.display = 'none';
+  } else if(CH.mode === 'unknown'){
+    b.textContent = '检测中'; b.className = 'chanbadge local';
+  } else {
+    b.textContent = '本地直连'; b.className = 'chanbadge local';
+    $('#chanDesc').textContent = '当前是纯静态页面，没有服务器代理，需要在本机填 Key 直连 DeepSeek。';
+    $('#chanHint').textContent = 'Key 只存在这台设备的浏览器里。';
+    $('#keyField').style.display = '';
+  }
+}
+
+/* ===================== 语音识别 ===================== */
+const SRClass = window.SpeechRecognition || window.webkitSpeechRecognition;
+const isStandalone = () => (window.navigator.standalone === true) ||
+  (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches);
+
+function canStart(){
+  if(!SRClass){
+    if(isStandalone()){
+      toast('「主屏幕」模式下 iOS 不开放语音识别。请回到 Safari，在地址栏里打开这个网址使用（可加入书签）。');
+    } else {
+      toast('这个浏览器不支持语音识别。请用 Safari 打开（微信/钉钉/夸克的内置浏览器都不行）。');
+    }
+    return false;
+  }
+  if(!CH.proxy && !S.apiKey){
+    toast('还没有翻译通道。点右上角 ⚙ 填 DeepSeek Key，或把 Key 配到服务器上。');
+    openSheet();
+    return false;
+  }
+  return true;
+}
+
+function startListen(){
+  if(!canStart()) return;
+  listening = true;
+  unlockTTS();
+  requestWake();
+  utt = null;
+  spawnRec();
+  paintRun();
+}
+
+function stopListen(){
+  listening = false;
+  recSuspended = false;
+  clearTimeout(restartTimer);
+  if(rec){ try{ rec.onend = null; rec.abort(); }catch(e){} rec = null; }
+  recGen++;
+  try{ speechSynthesis.cancel(); }catch(e){}
+  tts.q.length = 0; tts.speaking = false;
+  livebar.textContent = '';
+  releaseWake();
+  paintRun();
+}
+
+function spawnRec(){
+  if(!listening) return;
+  clearTimeout(restartTimer);
+  const g = ++recGen;
+  let r;
+  try{ r = new SRClass(); }catch(e){ return; }
+
+  r.lang = dir().src;
+  r.continuous = true;
+  r.interimResults = true;
+  r.maxAlternatives = 1;
+
+  r.onstart = () => { if(g === recGen) setLive(true); };
+  r.onresult = e => { if(g === recGen) handleResult(e); };
+
+  r.onerror = ev => {
+    if(g !== recGen) return;
+    const err = ev.error;
+    if(err === 'not-allowed' || err === 'service-not-allowed'){
+      listening = false; paintRun(); setLive(false);
+      toast('语音识别被拒绝了。检查：设置 → Safari → 麦克风；以及「设置 → Siri 与搜索」里 Siri 必须开启。');
+      return;
+    }
+    if(err === 'audio-capture'){
+      listening = false; paintRun(); setLive(false);
+      toast('抓不到麦克风。确认 AirPods 已连上、没在做别的通话。');
+      return;
+    }
+  };
+
+  r.onend = () => {
+    if(g !== recGen) return;
+    setLive(false);
+    if(!listening || recSuspended) return;
+    clearTimeout(restartTimer);
+    restartTimer = setTimeout(() => { if(listening && !recSuspended) spawnRec(); }, 260);
+  };
+
+  rec = r;
+  try{ r.start(); }
+  catch(e){
+    clearTimeout(restartTimer);
+    restartTimer = setTimeout(() => { if(listening && !recSuspended) spawnRec(); }, 400);
+  }
+}
+
+/* 朗读期间主动让出音频通道（半双工）。iOS 上 TTS 和识别同时跑容易互相打架：
+   要么识别被踹断，要么耳机漏音把译文又听回去。这一对函数就是兜底开关。 */
+function suspendRec(){
+  if(recSuspended) return;
+  recSuspended = true;
+  clearTimeout(restartTimer);
+  if(rec){ try{ rec.onend = null; rec.abort(); }catch(e){} rec = null; }
+  recGen++;
+  setLive(false);
+}
+function resumeRec(){
+  if(!recSuspended) return;
+  recSuspended = false;
+  if(!listening) return;
+  clearTimeout(restartTimer);
+  restartTimer = setTimeout(() => { if(listening && !recSuspended) spawnRec(); }, 120);
+}
+
+function handleResult(e){
+  const now = Date.now();
+  let finals = [], interim = '';
+  for(let i = e.resultIndex; i < e.results.length; i++){
+    const res = e.results[i];
+    const txt = ((res[0] && res[0].transcript) || '').trim();
+    if(res.isFinal) finals.push(txt); else interim += txt;
+  }
+
+  if(interim){
+    if(utt && !utt.done){ utt.text = (utt.base + ' ' + interim).trim(); }
+    else { utt = newUtt((utt && utt.base || '') + ' ' + interim); }
+    livebar.textContent = interim;
+    maybeProvision();
+  }
+
+  for(const f of finals){
+    if(!f) continue;
+    if(S.echoGuard && now < tts.mutedUntil) continue;
+    // Safari 在会话重启后会重发上一句的 final，用相似度而不是全等来去重
+    if(now - lastFinalAt < 3000 && similar(f, lastFinalText)) continue;
+    lastFinalText = f; lastFinalAt = now;
+
+    const base = utt ? utt.base : '';
+    utt = newUtt((base + ' ' + f).trim(), now);
+    livebar.textContent = '';
+    utt.done = true;
+    const rest = remainder(utt);
+    if(rest.trim()) fireTranslate(utt);
+  }
+}
+
+function newUtt(text, t){
+  return {
+    text: text || '', frontier:'', inflight:false, done:false,
+    lastFire:0, card:null, tSpeechEnd: t || Date.now(),
+  };
+}
+
+/* ===================== 抢译 ===================== */
+function maybeProvision(){
+  if(!S.provisional || !utt || utt.done || utt.inflight) return;
+  const rest = remainder(utt);
+  const trimmed = rest.trim();
+  if(!trimmed) return;
+  const boundary = /[，,。.？?！!；;：:]$/.test(trimmed) || /[。.？?！!]\s/.test(rest);
+  const long = trimmed.length >= 42;
+  if((boundary || long) && Date.now() - utt.lastFire > 800) fireTranslate(utt);
+}
+
+function remainder(u){
+  const t = u.text.trim();
+  const f = u.frontier.trim();
+  if(!f) return t;
+  if(t.startsWith(f)) return t.slice(f.length);
+  const p = commonPrefix(t, f);
+  if(p.length >= f.length * 0.78) return t.slice(p.length);
+  return t;
+}
+function commonPrefix(a, b){
+  let i = 0; const n = Math.min(a.length, b.length);
+  while(i < n && a[i] === b[i]) i++;
+  return a.slice(0, i);
+}
+
+/* 判断两段识别结果是不是"同一句"：去掉标点空格后比相似度 */
+function normTxt(s){
+  return String(s || '').toLowerCase().replace(/[^\p{L}\p{N}]/gu, '');
+}
+function similar(a, b){
+  const x = normTxt(a), y = normTxt(b);
+  if(!x || !y) return false;
+  if(x === y) return true;
+  if(x.length > 3 && y.length > 3 && (x.includes(y) || y.includes(x))) return true;
+  const m = x.length, n = y.length;
+  if(Math.abs(m - n) / Math.max(m, n) > 0.35) return false;
+  const dp = new Array(n + 1);
+  for(let j = 0; j <= n; j++) dp[j] = j;
+  for(let i = 1; i <= m; i++){
+    let prev = dp[0]; dp[0] = i;
+    for(let j = 1; j <= n; j++){
+      const tmp = dp[j];
+      dp[j] = Math.min(dp[j] + 1, dp[j-1] + 1, prev + (x[i-1] === y[j-1] ? 0 : 1));
+      prev = tmp;
+    }
+  }
+  return 1 - dp[n] / Math.max(m, n) >= 0.86;
+}
+
+async function fireTranslate(u){
+  const text = remainder(u);
+  if(!text.trim()) return;
+  const covered = u.text;
+  u.inflight = true;
+  u.lastFire = Date.now();
+
+  const d = dir();
+  if(!u.card) u.card = addCard(d, u.text);
+  else { u.card.srcText = u.text; u.card.querySelector('.src').textContent = u.text; }
+
+  const t0 = Date.now();
+  try{
+    const out = await translateStream(text, d, u.card);
+    u.frontier = covered;
+    if(out && out.trim()){
+      pushRecent(out);
+      // 「我听对方」→ 念进耳朵；「对方听我」→ 念出去给对方听（需先把音频输出切到 iPhone 扬声器）。
+      // 关掉 speakerOut 就只出字幕，不占音频通道。
+      if(S.speak && (mode === 'listen' || S.speakerOut)) enqueueSpeech(out, d.dst);
+    }
+    const dt = (Date.now() - u.tSpeechEnd) / 1000;
+    if(dt > 0 && dt < 60) statEl.textContent = '本轮 ' + dt.toFixed(1) + 's 后出声';
+  }catch(err){
+    if(err && err.name === 'AbortError') return;
+    const dstEl = u.card && u.card.querySelector('.dst');
+    if(dstEl) dstEl.innerHTML = '<span style="color:var(--danger);font-size:15px">' + esc(errMessage(err)) + '</span>';
+  }finally{
+    u.inflight = false;
+  }
+}
+
+function errMessage(err){
+  const m = String((err && err.message) || err);
+  if(/401|unauthor/i.test(m)) return 'API Key 无效';
+  if(/402|balance|insufficient/i.test(m)) return 'DeepSeek 余额不足';
+  if(/429|rate/i.test(m)) return '请求太频繁，稍等几秒';
+  if(/Failed to fetch|NetworkError|network|load failed/i.test(m)) return '网络断了（翻译需要联网）';
+  if(/502|DEEPSEEK_API_KEY/i.test(m)) return '服务器没配 Key，见设置里说明';
+  return '翻译失败：' + m;
+}
+
+/* ===================== 翻译 ===================== */
+function sysPrompt(d){
+  const g = (S.glossary || '').trim();
+  let p =
+`你是顶尖的口译员。下面给你一段由语音识别得到的口语原文，请把它翻译成【${d.to.prompt}】，供人当场听懂。
+
+铁律：
+1. 只输出译文本身。不要解释、不要注释、不要加引号、不要"译文："之类前缀、不要括号补充。
+2. 这是口语不是书面语。译文必须能直接被说出口，用${d.to.prompt}母语者日常说话的方式，不要翻译腔、不要逐字硬译。
+3. 原文里必然有识别错误：同音错字、断句错误、重复词、口吃、语气词（嗯、那个、you know、like）。按说话人最可能的意思修正后再译，不要把噪音原样译出。
+4. 人名、品牌、机构、专有名词保留原文或采用通行译法，前后必须一致。
+5. 数字、单位、时间照实翻译，不要换算。
+6. 语气要对齐：对方开玩笑就译出玩笑味，正式就正式。
+7. 如果原文只是无意义碎片、语气词或明显是背景噪音，只输出一个 ∅（别的什么都不要）。`;
+  if(g) p += `\n\n术语表（必须严格沿用，等号左边出现时译成右边）：\n${g}`;
+  return p;
+}
+
+function recentTurns(d){
+  const n = Math.max(0, Math.min(10, parseInt(S.ctx) || 0));
+  const out = [];
+  for(let i = cards.length - 1; i >= 0 && out.length < n; i--){
+    const c = cards[i];
+    if(c.dirSrc !== d.src) continue;
+    const dst = (c.dstText || '').trim();
+    if(!dst || dst === '∅') continue;
+    out.unshift({ src:c.srcText, dst });
+  }
+  return out;
+}
+
+async function translateStream(text, d, card){
+  const msgs = [{ role:'system', content: sysPrompt(d) }];
+  for(const t of recentTurns(d)){
+    msgs.push({ role:'user', content:t.src });
+    msgs.push({ role:'assistant', content:t.dst });
+  }
+  msgs.push({ role:'user', content:text });
+
+  const url = CH.proxy ? 'api/translate' : 'https://api.deepseek.com/chat/completions';
+  const headers = { 'Content-Type':'application/json' };
+  if(!CH.proxy) headers['Authorization'] = 'Bearer ' + S.apiKey;
+
+  const res = await fetch(url, {
+    method:'POST',
+    headers,
+    body: JSON.stringify({
+      model:S.model, messages:msgs, stream:true,
+      temperature:1.3, max_tokens:800,
+    }),
+  });
+
+  if(!res.ok){
+    let detail = '';
+    try{ const j = await res.json(); detail = (j.error && j.error.message) || ''; }catch(e){}
+    throw new Error(res.status + ' ' + detail);
+  }
+
+  const dstEl = card.querySelector('.dst');
+  let acc = '';
+  const paint = () => { card.classList.add('streaming'); dstEl.textContent = acc; };
+
+  if(res.body && res.body.getReader){
+    const reader = res.body.getReader();
+    const dec = new TextDecoder();
+    let buf = '';
+    for(;;){
+      const { done, value } = await reader.read();
+      if(done) break;
+      buf += dec.decode(value, { stream:true });
+      let idx;
+      while((idx = buf.indexOf('\n')) >= 0){
+        const line = buf.slice(0, idx).trim();
+        buf = buf.slice(idx + 1);
+        if(!line.startsWith('data:')) continue;
+        const payload = line.slice(5).trim();
+        if(!payload || payload === '[DONE]') continue;
+        try{
+          const j = JSON.parse(payload);
+          const delta = j.choices && j.choices[0] && j.choices[0].delta && j.choices[0].delta.content;
+          if(delta){ acc += delta; paint(); }
+        }catch(e){}
+      }
+    }
+  } else {
+    const txt = await res.text();
+    for(const line of txt.split('\n')){
+      const s = line.trim();
+      if(!s.startsWith('data:')) continue;
+      const payload = s.slice(5).trim();
+      if(!payload || payload === '[DONE]') continue;
+      try{
+        const j = JSON.parse(payload);
+        const delta = j.choices && j.choices[0] && j.choices[0].delta && j.choices[0].delta.content;
+        if(delta) acc += delta;
+      }catch(e){}
+    }
+    paint();
+  }
+
+  card.classList.remove('streaming');
+  acc = acc.trim().replace(/^["“'']+|["”'']+$/g, '').trim();
+
+  if(!acc || acc === '∅' || acc === '∅。'){
+    if(!card.dstText){ card.remove(); const i = cards.indexOf(card); if(i >= 0) cards.splice(i, 1); }
+    else dstEl.textContent = card.dstText;
+    return '';
+  }
+
+  card.dstText = card.dstText ? (card.dstText + ' ' + acc) : acc;
+  dstEl.textContent = card.dstText;
+  return acc;
+}
+
+/* ===================== 卡片 ===================== */
+function addCard(d, srcText){
+  if(emptyEl && emptyEl.parentNode) emptyEl.style.display = 'none';
+  const el = document.createElement('article');
+  el.className = 'card';
+  el.dirSrc = d.src;
+  el.srcText = srcText || '';
+  el.dstText = '';
+  el.innerHTML = '<div class="src"></div><div class="dst"><span class="dots"><i></i><i></i><i></i></span></div>';
+  el.querySelector('.src').textContent = el.srcText;
+  streamEl.appendChild(el);
+  cards.push(el);
+  scrollEnd();
+  return el;
+}
+function scrollEnd(){ requestAnimationFrame(() => { streamEl.scrollTop = streamEl.scrollHeight; }); }
+
+/* ===================== 朗读 ===================== */
+const tts = { q:[], speaking:false, mutedUntil:0 };
+let voices = [];
+function loadVoices(){ try{ voices = speechSynthesis.getVoices() || []; }catch(e){ voices = []; } }
+if('speechSynthesis' in window){
+  loadVoices();
+  speechSynthesis.onvoiceschanged = loadVoices;
+  setTimeout(loadVoices, 400); setTimeout(loadVoices, 1500);
+}
+
+function pickVoice(code){
+  if(!voices.length) loadVoices();
+  if(!voices.length) return null;
+  const base = code.split('-')[0].toLowerCase();
+  const exact = voices.filter(v => v.lang && v.lang.replace('_','-').toLowerCase() === code.toLowerCase());
+  const loose = voices.filter(v => v.lang && v.lang.toLowerCase().startsWith(base));
+  const pool = exact.length ? exact : loose;
+  if(!pool.length) return null;
+  return pool.find(v => /enhanced|premium|siri|neural/i.test(v.name)) || pool[0];
+}
+
+function unlockTTS(){
+  if(!('speechSynthesis' in window)) return;
+  try{
+    const u = new SpeechSynthesisUtterance('.');
+    u.volume = 0; u.rate = 1.6;
+    speechSynthesis.speak(u);
+  }catch(e){}
+}
+
+function enqueueSpeech(text, lang){
+  if(!S.speak || !('speechSynthesis' in window)) return;
+  if(tts.q.length >= 2 && S.policy === 'skip'){
+    tts.q.length = 0;
+    try{ speechSynthesis.cancel(); }catch(e){}
+    tts.speaking = false;
+  }
+  tts.q.push({ text, lang });
+  pump();
+}
+
+function pump(){
+  if(tts.speaking || !tts.q.length) return;
+  const job = tts.q.shift();
+  const u = new SpeechSynthesisUtterance(job.text);
+  const v = pickVoice(job.lang);
+  if(v) u.voice = v;
+  u.lang = job.lang;
+  u.rate = parseFloat(S.rate) || 1.05;
+  tts.speaking = true;
+  if(S.duplex === 'half') suspendRec();
+
+  let settled = false, wd = null;
+  const done = () => {
+    if(settled) return;
+    settled = true;
+    clearTimeout(wd);
+    tts.speaking = false;
+    tts.mutedUntil = Date.now() + 450;
+    if(tts.q.length){ pump(); return; }
+    if(S.duplex === 'half') resumeRec();
+  };
+  u.onend = done; u.onerror = done;
+  try{ speechSynthesis.speak(u); }
+  catch(e){ done(); return; }
+  // 兜底：iOS 偶尔不派发 onend。没有这个定时器，半双工就会永久卡在"暂停听"
+  wd = setTimeout(done, Math.min(25000, 2500 + job.text.length * 260));
+}
+
+function pushRecent(t){ recentSpoken.push({ t, at:Date.now() }); if(recentSpoken.length > 8) recentSpoken.shift(); }
+
+/* ===================== 屏幕常亮 ===================== */
+let wakeLock = null;
+async function requestWake(){
+  try{
+    if('wakeLock' in navigator && !wakeLock){
+      wakeLock = await navigator.wakeLock.request('screen');
+      wakeLock.addEventListener('release', () => { wakeLock = null; });
+    }
+  }catch(e){}
+}
+function releaseWake(){ try{ if(wakeLock) wakeLock.release(); }catch(e){} wakeLock = null; }
+
+/* ===================== 界面状态 ===================== */
+function setLive(on){ dot.classList.toggle('live', !!on); }
+function paintRun(){
+  talkBtn.classList.toggle('stop', listening);
+  talkBtn.querySelector('.lb').textContent = listening ? '停止' : '开始同传';
+  talkBtn.querySelector('.sq').style.display = listening ? 'block' : 'none';
+  dot.classList.remove('live');
+}
+function esc(s){ return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+let toastTimer = null;
+function toast(msg){
+  const old = document.querySelector('.toast');
+  if(old) old.remove();
+  const d = document.createElement('div');
+  d.className = 'toast'; d.textContent = msg;
+  document.body.appendChild(d);
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => d.remove(), 4200);
+}
+
+/* ===================== 事件 ===================== */
+talkBtn.addEventListener('click', () => { if(listening) stopListen(); else startListen(); });
+
+document.querySelectorAll('#seg button').forEach(b => {
+  b.addEventListener('click', () => {
+    if(b.dataset.mode === mode) return;
+    mode = b.dataset.mode;
+    document.querySelectorAll('#seg button').forEach(x => x.classList.toggle('active', x === b));
+    applyMode();
+    if(listening){ stopListen(); setTimeout(startListen, 240); }
+  });
+});
+
+function applyMode(){
+  const reply = mode === 'reply';
+  document.body.classList.toggle('replymode', reply);
+  streamEl.classList.toggle('flip', reply);
+  livebar.classList.toggle('flip', reply);
+  const hint = document.getElementById('flipHint');
+  if(hint) hint.style.display = reply ? '' : 'none';
+}
+
+$('#btnSpeak').addEventListener('click', e => {
+  S.speak = !S.speak; save();
+  e.currentTarget.classList.toggle('on', S.speak);
+  e.currentTarget.classList.toggle('off', !S.speak);
+  if(!S.speak){ try{ speechSynthesis.cancel(); }catch(_){} tts.q.length = 0; tts.speaking = false; }
+});
+
+$('#btnFont').addEventListener('click', () => {
+  const big = document.documentElement.dataset.fs !== 'big';
+  document.documentElement.dataset.fs = big ? 'big' : 'std';
+  document.querySelectorAll('.card .dst').forEach(el => { el.style.fontSize = big ? '27px' : ''; });
+  toast(big ? '字号：大' : '字号：标准');
+});
+
+$('#btnExport').addEventListener('click', exportMD);
+$('#btnExport2').addEventListener('click', exportMD);
+$('#btnSelfTest').addEventListener('click', () => { location.href = 'selftest.html'; });
+
+function exportMD(){
+  if(!cards.length){ toast('还没有内容可导出'); return; }
+  const d = new Date(), pad = n => String(n).padStart(2,'0');
+  let md = '# 同传记录\n\n' + d.getFullYear() + '-' + pad(d.getMonth()+1) + '-' + pad(d.getDate()) +
+           ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes()) + '\n\n---\n\n';
+  for(const c of cards) md += '**' + (c.srcText || '').trim() + '**\n\n' + (c.dstText || '').trim() + '\n\n';
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([md], { type:'text/markdown;charset=utf-8' }));
+  a.download = '同传记录-' + d.getFullYear() + pad(d.getMonth()+1) + pad(d.getDate()) + '-' + pad(d.getHours()) + pad(d.getMinutes()) + '.md';
+  document.body.appendChild(a); a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1200);
+  toast('已导出到「文件 → 下载」');
+}
+
+/* ===================== 设置 ===================== */
+function openSheet(){ $('#sheet').classList.add('show'); fillSheet(); }
+function closeSheet(){ $('#sheet').classList.remove('show'); }
+$('#btnSheet').addEventListener('click', openSheet);
+$('#sheet').addEventListener('click', e => { if(e.target.dataset.close !== undefined) closeSheet(); });
+$('#sheet .veil').addEventListener('click', closeSheet);
+
+const fKey = $('#fKey');
+function fillSheet(){
+  fKey.value = S.apiKey;
+  $('#fModel').value = S.model;
+  $('#fRate').value = S.rate;
+  $('#fGloss').value = S.glossary;
+  $('#fCtx').value = S.ctx;
+  $('#fPolicy').value = S.policy;
+  $('#swProv').classList.toggle('on', !!S.provisional);
+  $('#swSpeaker').classList.toggle('on', !!S.speakerOut);
+  $('#swEcho').classList.toggle('on', !!S.echoGuard);
+  $('#fDuplex').value = S.duplex === 'half' ? 'half' : 'full';
+  fillLang($('#fMyLang'), S.myLang);
+  fillLang($('#fTheirLang'), S.theirLang);
+  paintChannel();
+  $('#connmsg').textContent = ''; $('#connmsg').className = '';
+}
+function fillLang(sel, cur){
+  sel.innerHTML = '';
+  for(const l of LANGS){
+    const o = document.createElement('option');
+    o.value = l.code; o.textContent = l.label;
+    if(l.code === cur) o.selected = true;
+    sel.appendChild(o);
+  }
+}
+
+fKey.addEventListener('input', () => { S.apiKey = fKey.value.trim(); save(); });
+$('#fModel').addEventListener('change', e => { S.model = e.target.value; save(); });
+$('#fMyLang').addEventListener('change', e => { S.myLang = e.target.value; save(); refreshSeg(); });
+$('#fTheirLang').addEventListener('change', e => { S.theirLang = e.target.value; save(); refreshSeg(); });
+$('#fPolicy').addEventListener('change', e => { S.policy = e.target.value; save(); });
+$('#fRate').addEventListener('input', e => { S.rate = parseFloat(e.target.value); save(); });
+$('#fGloss').addEventListener('input', e => { S.glossary = e.target.value; save(); });
+$('#fCtx').addEventListener('input', e => { S.ctx = parseInt(e.target.value) || 0; save(); });
+$('#swProv').addEventListener('click', e => { S.provisional = !S.provisional; save(); e.currentTarget.classList.toggle('on', S.provisional); });
+$('#swSpeaker').addEventListener('click', e => { S.speakerOut = !S.speakerOut; save(); e.currentTarget.classList.toggle('on', S.speakerOut); });
+$('#swEcho').addEventListener('click', e => { S.echoGuard = !S.echoGuard; save(); e.currentTarget.classList.toggle('on', S.echoGuard); });
+$('#fDuplex').addEventListener('change', e => {
+  S.duplex = e.target.value === 'half' ? 'half' : 'full'; save();
+  if(S.duplex === 'full') resumeRec();
+  toast(S.duplex === 'half' ? '半双工：朗读时会暂停听' : '全双工：边念边听');
+});
+
+$('#btnClear').addEventListener('click', () => {
+  if(!confirm('清空本次所有字幕？')) return;
+  cards.length = 0;
+  streamEl.innerHTML = '';
+  streamEl.appendChild(emptyEl);
+  emptyEl.style.display = '';
+  utt = null; statEl.textContent = '';
+  closeSheet(); toast('已清空');
+});
+
+$('#btnTest').addEventListener('click', async () => {
+  const msg = $('#connmsg');
+  msg.className = ''; msg.textContent = '测试中…';
+  try{
+    const url = CH.proxy ? 'api/translate' : 'https://api.deepseek.com/chat/completions';
+    const headers = { 'Content-Type':'application/json' };
+    if(!CH.proxy) headers['Authorization'] = 'Bearer ' + (S.apiKey || '');
+    const r = await fetch(url, {
+      method:'POST', headers,
+      body: JSON.stringify({ model:S.model, messages:[{ role:'user', content:'ping' }], max_tokens:4, stream:false }),
+    });
+    if(r.ok){ msg.className = 'ok'; msg.textContent = '✓ 通道正常，可以开始同传'; }
+    else {
+      const j = await r.json().catch(() => ({}));
+      msg.className = 'err';
+      msg.textContent = '✗ ' + r.status + ' ' + ((j.error && j.error.message) || '检查 Key');
+    }
+  }catch(e){ msg.className = 'err'; msg.textContent = '✗ 网络不通：' + e.message; }
+});
+
+function refreshSeg(){
+  document.querySelector('#seg button[data-mode=listen]').innerHTML =
+    '我听对方 <span class="arw">→</span> ' + langOf(S.myLang).label;
+  document.querySelector('#seg button[data-mode=reply]').innerHTML =
+    '对方听我 <span class="arw">→</span> ' + langOf(S.theirLang).label;
+}
+
+/* ===================== 启动 ===================== */
+(async function boot(){
+  refreshSeg();
+  $('#btnSpeak').classList.toggle('on', S.speak);
+  $('#btnSpeak').classList.toggle('off', !S.speak);
+
+  await detectChannel();
+  paintChannel();
+
+  // 切后台 iOS 会挂起识别，回来时必须强制重建，不能只看 rec 是否存在
+  // （旧对象往往还在但已经死了，导致「看着在听，其实哑了」）
+  document.addEventListener('visibilitychange', () => {
+    if(document.hidden || !listening) return;
+    requestWake();
+    clearTimeout(restartTimer);
+    if(rec){ try{ rec.onend = null; rec.abort(); }catch(e){} rec = null; }
+    recGen++;
+    recSuspended = false;
+    restartTimer = setTimeout(() => { if(listening) spawnRec(); }, 320);
+  });
+
+  if(!SRClass){
+    emptyEl.innerHTML = '<span class="big">⚠️</span>' +
+      (isStandalone()
+        ? '「主屏幕」模式下 iOS 不开放语音识别<br><span style="font-size:13px">请回 Safari 地址栏打开（可加书签）</span>'
+        : '这个浏览器不支持语音识别<br><span style="font-size:13px">请用 Safari 打开</span>');
+    return;
+  }
+
+  if(CH.proxy && !S.apiKey){
+    emptyEl.innerHTML = '';
+    const box = document.createElement('div');
+    box.className = 'setup';
+    box.innerHTML =
+      '<h4>通道已就绪</h4>' +
+      '<p>服务器上已经配好 DeepSeek Key，你不需要做任何配置。</p>' +
+      '<ol>' +
+        '<li>戴好 AirPods，确认已连上这台 iPhone</li>' +
+        '<li>点下面「开始同传」，把手机放在你和对方之间</li>' +
+        '<li>对方说话时，中文会念进你耳朵；切换到「对方听我」时，把屏幕转向对方</li>' +
+      '</ol>' +
+      '<div class="warnbox" style="margin:12px 0 0">第一次点「开始同传」会弹麦克风/听写授权，必须点允许。若没反应，去「设置 → Siri 与搜索」确认 Siri 已开启。</div>';
+    emptyEl.appendChild(box);
+  } else if(!S.apiKey){
+    emptyEl.innerHTML = '';
+    const box = document.createElement('div');
+    box.className = 'setup';
+    box.innerHTML =
+      '<h4>还差一个 Key</h4>' +
+      '<p>现在走的是本地直连模式（没有服务器代理），需要填一个 DeepSeek API Key。</p>' +
+      '<ol>' +
+        '<li>去 <a class="linklike" href="https://platform.deepseek.com/api_keys" target="_blank" rel="noopener">platform.deepseek.com</a> 建 Key</li>' +
+        '<li>点右上角 <b>⚙</b> 粘进去，点「测试连接」</li>' +
+        '<li>回来点「开始同传」</li>' +
+      '</ol>' +
+      '<div class="btnrow"><button class="primary" id="goSetup">去填 Key</button></div>';
+    emptyEl.appendChild(box);
+    box.querySelector('#goSetup').addEventListener('click', openSheet);
+  }
+})();
+</script>
+</body>
+</html>
